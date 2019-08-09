@@ -133,7 +133,7 @@ const refreshToken = async (accessToken) => {
 const getToken = async (options) => {
     // 从缓存中取出 Token
     let accessToken = wepy.getStorageSync('access_token')
-    let expiredAt = wepy.getStorageSync('access_token_expired_at')
+    let expiredAt = wepy.getStorageSync('access_token_expired_after')
 
     // 如果 token 过期了，则调用刷新方法
     if (accessToken && new Date().getTime() > expiredAt) {
@@ -144,10 +144,7 @@ const getToken = async (options) => {
             accessToken = refreshResponse.data.data.access_token
         } else {
             // 刷新失败了，重新调用登录方法，设置 Token
-            let authResponse = await login()
-            if (authResponse.data.status !== 1) {
-                accessToken = authResponse.data.data.access_token
-            }
+            return false
         }
     }
 
@@ -156,6 +153,15 @@ const getToken = async (options) => {
 
 // 带身份认证的请求
 const authRequest = async (options, showLoading = true) => {
+    // 检查微信小程序登录态是否失效
+    try{
+        let session = await wepy.checkSession()
+        console.log('Session:' + JSON.stringify(session))
+    }catch(e) {
+        // 小程序登录态失效， 重新登录
+        return false
+    }
+
     if (typeof options === 'string') {
         options = {
             url: options
@@ -163,6 +169,9 @@ const authRequest = async (options, showLoading = true) => {
     }
     // 获取Token
     let accessToken = await getToken()
+    if(false === accessToken) {
+        return false
+    }
 
     // 将 Token 设置在 header 中
     let header = options.header || {}
@@ -173,11 +182,8 @@ const authRequest = async (options, showLoading = true) => {
     console.log(response)
     if (response.statusCode === 401 || response.data.status_code === 401) {
         wepy.clearStorage()
-        let loginResponse = await login()
         console.log(loginResponse)
-        if (loginResponse.data.status === 1) {
-            response = await authRequest(options, showLoading)
-        }
+        return false
     }
     return response
 }
